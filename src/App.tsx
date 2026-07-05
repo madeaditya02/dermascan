@@ -77,7 +77,6 @@ type HistoryResponse = {
 
 type HistoryDetailState = {
   item: HistoryItem
-  preview?: string
 }
 
 type ApiError = {
@@ -156,6 +155,26 @@ async function fetchHistory(token: string, page = 1, limit = 10) {
       headers: { Authorization: `Bearer ${token}` },
     },
   )
+}
+
+async function fetchHistoryImage(token: string, imageKey: string) {
+  const response = await fetch(
+    `${API_BASE}/api/history/image?key=${encodeURIComponent(imageKey)}`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  )
+
+  if (!response.ok) {
+    const contentType = response.headers.get('content-type') ?? ''
+    if (contentType.includes('application/json')) {
+      const error = (await response.json()) as ApiError
+      throw new Error(error.message || error.error || 'Gagal memuat gambar')
+    }
+    throw new Error('Gagal memuat gambar')
+  }
+
+  return response.blob()
 }
 
 function toClassLabel(code: string) {
@@ -520,7 +539,7 @@ function ResultView({
     <div className="result-layout">
       <img className="result-image" src={preview} alt="Hasil scan" />
       <div className="result-panel">
-        <span className="warning-pill">Peringatan Medis</span>
+        {/* <span className="warning-pill">Peringatan Medis</span> */}
         <div className="result-head">
           <div>
             <h2>
@@ -564,10 +583,6 @@ function ResultView({
 
 function HistoryPage() {
   const { token } = useAuth()
-  const latestPredictionRaw = localStorage.getItem('dermascan_latest_prediction')
-  const latestPreview = latestPredictionRaw
-    ? ((JSON.parse(latestPredictionRaw) as { preview?: string }).preview ?? '')
-    : ''
   const [items, setItems] = useState<HistoryItem[]>([])
   const [pagination, setPagination] = useState({
     page: 1,
@@ -578,6 +593,17 @@ function HistoryPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [page, setPage] = useState(1)
+
+  const thisMonthPredictions = useMemo(() => {
+    const now = new Date()
+    return items.filter((item) => {
+      const itemDate = new Date(item.createdAt)
+      return (
+        itemDate.getFullYear() === now.getFullYear() &&
+        itemDate.getMonth() === now.getMonth()
+      )
+    })
+  }, [items])
 
   useEffect(() => {
     if (!token) return
@@ -606,8 +632,8 @@ function HistoryPage() {
           <strong>{pagination.totalItems}</strong>
         </div>
         <div className="stat-card">
-          <span>Halaman</span>
-          <strong>{pagination.page}</strong>
+          <span>Bulan Ini</span>
+          <strong>{thisMonthPredictions.length}</strong>
         </div>
       </div>
       <div className="history-card">
@@ -655,7 +681,7 @@ function HistoryPage() {
                     <Link
                       className="primary-link"
                       to={`/history/${item.id}`}
-                      state={{ item, preview: latestPreview } satisfies HistoryDetailState}
+                      state={{ item } satisfies HistoryDetailState}
                     >
                       Lihat Detail
                     </Link>
@@ -701,12 +727,46 @@ function HistoryPage() {
 }
 
 function HistoryDetailPage() {
+  const { token } = useAuth()
   const location = useLocation()
   const state = location.state as HistoryDetailState | null
-  const latestPrediction = localStorage.getItem('dermascan_latest_prediction')
-  const parsedLatest = latestPrediction ? (JSON.parse(latestPrediction) as { preview?: string; item?: HistoryItem }) : null
-  const record = state?.item ?? parsedLatest?.item ?? null
-  const preview = state?.preview ?? parsedLatest?.preview ?? ''
+  const record = state?.item ?? null
+  const [preview, setPreview] = useState('')
+  const [loadingImage, setLoadingImage] = useState(false)
+  const [imageError, setImageError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    let objectUrl = ''
+
+    if (!record || !token) {
+      return undefined
+    }
+
+    setLoadingImage(true)
+    setImageError('')
+
+    fetchHistoryImage(token, record.imageKey)
+      .then((blob) => {
+        if (!active) return
+        objectUrl = URL.createObjectURL(blob)
+        setPreview(objectUrl)
+      })
+      .catch((error) => {
+        if (!active) return
+        setImageError(error instanceof Error ? error.message : 'Gagal memuat gambar')
+      })
+      .finally(() => {
+        if (active) setLoadingImage(false)
+      })
+
+    return () => {
+      active = false
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl)
+      }
+    }
+  }, [record, token])
 
   if (!record) {
     return (
@@ -735,12 +795,21 @@ function HistoryDetailPage() {
       <div className="detail-layout">
         <div className="detail-image-card">
           <div className="detail-image">
-            {preview ? <img src={preview} alt="Gambar input" /> : null}
+            {loadingImage ? (
+              <div className="loading-state">Memuat gambar...</div>
+            ) : preview ? (
+              <img src={preview} alt="Gambar input" />
+            ) : (
+              <div className="empty-state">
+                <LuHistory />
+                <p>{imageError || 'Gambar tidak tersedia.'}</p>
+              </div>
+            )}
           </div>
-          <div className="detail-tag">Gambar Input Digital</div>
+          {/* <div className="detail-tag">Gambar Input Digital</div> */}
         </div>
         <div className="result-panel">
-          <span className="warning-pill">Peringatan Medis</span>
+          {/* <span className="warning-pill">Peringatan Medis</span> */}
           <div className="result-head">
             <div>
               <h2>
