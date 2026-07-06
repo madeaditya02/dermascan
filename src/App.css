@@ -474,6 +474,7 @@ th {
 .field {
   display: grid;
   gap: 10px;
+  margin: 0 16px;
 }
 
 .field>span {
@@ -498,6 +499,16 @@ th {
   outline: none;
   font: inherit;
   color: #13213a;
+}
+
+.input-wrap select {
+  flex: 1;
+  min-height: 48px;
+  border: 0;
+  outline: none;
+  font: inherit;
+  color: #13213a;
+  background: transparent;
 }
 
 .input-icon,
@@ -551,6 +562,21 @@ th {
   margin-top: 14px;
   background: #5d636f;
   color: #fff;
+}
+
+.detail-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.detail-chip {
+  background: #eff5ff;
+  color: #0d47a1;
+  border: 1px solid rgba(13, 71, 161, 0.18);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 700;
 }
 
 .breadcrumbs {

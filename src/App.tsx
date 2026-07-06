@@ -49,6 +49,7 @@ type PredictResponse = {
     confidence: number
     probabilities: Record<string, number>
     imageKey: string
+    modelUsed: string
     createdAt: number
   }
 }
@@ -59,6 +60,7 @@ type HistoryItem = {
   confidence: number
   probabilities: Record<string, number>
   imageKey: string
+  modelUsed: string
   createdAt: number
 }
 
@@ -136,15 +138,18 @@ async function register(email: string, password: string) {
   })
 }
 
-async function predictImage(token: string, image: File) {
+async function predictImage(token: string, image: File, model: string) {
   const formData = new FormData()
   formData.append('image', image)
 
-  return requestJson<PredictResponse>('/api/predict', {
+  return requestJson<PredictResponse>(
+    `/api/predict?model=${encodeURIComponent(model)}`,
+    {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: formData,
-  })
+    },
+  )
 }
 
 async function fetchHistory(token: string, page = 1, limit = 10) {
@@ -199,6 +204,14 @@ function formatDate(value: number) {
 
 function formatPercent(value: number) {
   return `${(value * 100).toFixed(value >= 0.1 ? 1 : 2)}%`
+}
+
+function formatModel(model: string) {
+  const labels: Record<string, string> = {
+    baseline: 'Baseline',
+    transfer_learning: 'Transfer Learning',
+  }
+  return labels[model] ?? model
 }
 
 function App() {
@@ -443,6 +456,7 @@ function ClassificationPage() {
   const { token } = useAuth()
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string>('')
+  const [model, setModel] = useState('baseline')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<PredictResponse['data'] | null>(null)
   const [error, setError] = useState('')
@@ -455,7 +469,7 @@ function ClassificationPage() {
     setResult(null)
 
     try {
-      const response = await predictImage(token, file)
+      const response = await predictImage(token, file, model)
       setResult(response.data)
       localStorage.setItem(
         'dermascan_latest_prediction',
@@ -498,8 +512,20 @@ function ClassificationPage() {
             <PiCameraPlus />
             <h2>Seret & Lepas Gambar</h2>
             <p>Atau klik untuk menelusuri file (JPG, PNG)</p>
-            {preview ? <img src={preview} alt="Pratinjau gambar" /> : null}
-            <span className="secondary-btn">Pilih Gambar</span>
+          {preview ? <img src={preview} alt="Pratinjau gambar" /> : null}
+          <span className="secondary-btn">Pilih Gambar</span>
+          </label>
+          <label className="field">
+            <span>Model Prediksi</span>
+            <div className="input-wrap">
+              <select
+                value={model}
+                onChange={(event) => setModel(event.target.value)}
+              >
+                <option value="baseline">Baseline</option>
+                <option value="transfer_learning">Transfer Learning</option>
+              </select>
+            </div>
           </label>
           {error ? <div className="alert">{error}</div> : null}
           <div className="notice">
@@ -539,7 +565,7 @@ function ResultView({
     <div className="result-layout">
       <img className="result-image" src={preview} alt="Hasil scan" />
       <div className="result-panel">
-        {/* <span className="warning-pill">Peringatan Medis</span> */}
+        <span className="warning-pill">Peringatan Medis</span>
         <div className="result-head">
           <div>
             <h2>
@@ -551,6 +577,9 @@ function ResultView({
             <strong>{formatPercent(data.confidence)}</strong>
             <span>Confidence Level</span>
           </div>
+        </div>
+        <div className="detail-chip-row">
+          <span className="detail-chip">Model: {formatModel(data.modelUsed)}</span>
         </div>
         <div className="result-note">
           Hasil ini bukan diagnosis final. Hubungi tenaga medis profesional
@@ -806,10 +835,10 @@ function HistoryDetailPage() {
               </div>
             )}
           </div>
-          {/* <div className="detail-tag">Gambar Input Digital</div> */}
+          <div className="detail-tag">Gambar Input Digital</div>
         </div>
         <div className="result-panel">
-          {/* <span className="warning-pill">Peringatan Medis</span> */}
+          <span className="warning-pill">Peringatan Medis</span>
           <div className="result-head">
             <div>
               <h2>
@@ -821,6 +850,11 @@ function HistoryDetailPage() {
               <strong>{formatPercent(record.confidence)}</strong>
               <span>Confidence Level</span>
             </div>
+          </div>
+          <div className="detail-chip-row">
+            <span className="detail-chip">
+              Model: {formatModel(record.modelUsed)}
+            </span>
           </div>
           <div className="result-note">
             Hasil ini bukan diagnosis final. Hubungi tenaga medis profesional
